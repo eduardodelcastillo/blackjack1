@@ -1,10 +1,4 @@
-#oop_blackjack.rb
-#Gameplay: Player and Dealer, gets dealt 2 cards each: player's cards face up while dealer gets first card face up
-# * Players get prompt to hit or stay, when Stay, dealer gets hit until total is at least 17. If not busted, total for both is compared to declare winner.
-# Requirements: OOP, multiple decks
-# Nouns: Suit, Value, Card, Deck, Players: Player and Dealer
-# Behaviours: shuffle, deal, show_second_card, calculate_total, declare_winner
-
+#oop_blackjack.rb Wed 7 Oct 2015
 
 require 'pry'
 
@@ -65,18 +59,20 @@ end
 module Hand
   def calculate_total(cards)
     total = 0
+    ace_count = 0
     cards.each do |card|
       if (1..10).include?(card.value.to_i)
         total += card.value.to_i
-      elsif card.value == 'K' || card.value == 'Q' || card.value == 'J'
+      elsif %w(J Q K).include?(card.value)
         total += 10
       elsif card.value == 'A'
-        if total > 10
-          total += 1
-        else
-          total += 11
-        end
+        total += 11
+        ace_count += 1
       end
+    end
+    #correct for Aces
+    ace_count.times do 
+      total -= 10 if total > 21
     end
     total
   end
@@ -92,15 +88,18 @@ end
 
 class Player
   include Hand
-  attr_accessor :cards
+  attr_accessor :cards, :total, :score
   attr_reader :name
 
   def initialize(name)
     @name = name 
     @cards = []
+    @total = 0
+    @score = 0
   end
 
   def show_cards
+    system "clear"
     puts "#{name} has the following cards: "
     puts cards
     puts "#{name} has a total of #{calculate_total(cards)}" 
@@ -110,33 +109,31 @@ class Player
     puts "#{name} has the first card: " 
     puts "#{cards[0]}"
   end
+
+  def clear_hand
+    self.cards = []
+  end
 end
 
 class Game
   include Hand
   attr_accessor :player, :dealer, :deck
-  player_total = 0
-  dealer_total = 0
 
   def initialize
-    game_intro
-    @deck = Deck.new
-    set_number_of_decks
-    @player = Player.new(@@player_name)
-    @dealer = Player.new("Dealer " + @@dealer_name)
-    deal_initial_cards   
-  end
-
-  def game_intro
-    puts "--÷--÷--÷--÷--÷--÷--÷--÷--÷--÷--".center(42)
-    puts "Welcome to BLACKJACK!".center(42)
-    puts "--÷--÷--÷--÷--÷--÷--÷--÷--÷--÷--".center(42)     
-    puts "What is your name?"
-    @@player_name = gets.chomp
-    dealer_list = %w(Derrick Bianca Luna Oliver)
-    @@dealer_name = dealer_list.sample
-    puts "Welcome #{@@player_name}. Your dealer for today is #{@@dealer_name}."
-    puts "Let's play!"  
+    @deck = Deck.new  
+    set_number_of_decks      
+    begin
+      puts "--÷--÷--÷--÷--÷--÷--÷--÷--÷--÷--".center(42)
+      puts "Welcome to BLACKJACK!".center(42)
+      puts "--÷--÷--÷--÷--÷--÷--÷--÷--÷--÷--".center(42)
+      puts "What is your name?"     
+      @player = Player.new(gets.chomp)
+      @dealer = Player.new("Dealer " + dealer_for_today)      
+      puts "Welcome #{player.name}. Your dealer for today is #{dealer.name}."
+      puts "Let's play!"
+      puts "Press enter to continue..."
+    end until gets.chomp
+      deal_initial_cards  
   end
 
   def set_number_of_decks
@@ -144,8 +141,8 @@ class Game
   end
 
   def deal_initial_cards
-    player.cards = []
-    dealer.cards = []
+    player.clear_hand
+    dealer.clear_hand
     2.times do 
       player.cards << deck.deal_card
       dealer.cards << deck.deal_card
@@ -154,12 +151,15 @@ class Game
 
   def play
     player.show_cards
+    player.total = calculate_total(player.cards)
     if is_blackjack?(player.cards)
       puts "#{player.name} has blackjack! #{player.name} wins!"
+      player.score += 1
     else
       dealer.show_first_card
       hit_or_stay
     end
+    show_score
     play_again
   end
 
@@ -179,13 +179,16 @@ class Game
       if hit_or_stay == 'h'
         player.cards << deck.deal_card
         player.show_cards
-        player_total = calculate_total(player.cards)
-        #Check for bust
+        player.total = calculate_total(player.cards)
         if is_busted?(player.cards)
-          puts "#{player.name} busted at #{player_total}. #{player.name} loses!"
+          puts "#{player.name} busted at #{player.total}. #{player.name} loses!"
+          dealer.score += 1
+          break
+        elsif player.total == 21
+          dealer_turn
           break
         end
-      elsif hit_or_stay == 's' || calculate_total(player.cards) == 21
+      elsif hit_or_stay == 's' 
         dealer_turn
         break      
       else
@@ -196,19 +199,20 @@ class Game
 
   def dealer_turn
     dealer.show_cards
-    dealer_total = calculate_total(dealer.cards)
-    #Check for blackjack
+    dealer.total = calculate_total(dealer.cards)
     if is_blackjack?(dealer.cards)
       puts "#{dealer.name} has blackjack! #{player.name} loses!"
+      dealer.score += 1
     else
-      while dealer_total < 17
+      while dealer.total < 17
         puts "Dealing another card for dealer..."
         dealer.cards << deck.deal_card
         dealer.show_cards
-        dealer_total = calculate_total(dealer.cards)
+        dealer.total = calculate_total(dealer.cards)
       end
       if is_busted?(dealer.cards)
         puts "#{dealer.name} busted. #{player.name} wins!"
+        player.score += 1
       else
         compare_results
       end   
@@ -216,17 +220,28 @@ class Game
   end
 
   def compare_results
-    player_total = calculate_total(player.cards)
-    dealer_total = calculate_total(dealer.cards)
-    if player_total == dealer_total
+    if player.total == dealer.total
       puts "It's a tie!"
-    elsif player_total > dealer_total
-      puts "#{dealer.name} has #{dealer_total} while #{player.name} has #{player_total}. #{player.name} wins!"
-    elsif player_total < dealer_total
-      puts "#{dealer.name} has #{dealer_total} while #{player.name} has #{player_total}. #{player.name} loses!"  
+    elsif player.total > dealer.total
+      puts "#{dealer.name} has #{dealer.total} while #{player.name} has #{player.total}. #{player.name} wins!"
+      player.score += 1
+    elsif player.total < dealer.total
+      puts "#{dealer.name} has #{dealer.total} while #{player.name} has #{player.total}. #{player.name} loses!"  
+      dealer.score += 1
     end    
+  end
+
+  def show_score
+    puts "--÷--÷--÷--÷--÷--÷--÷--÷--÷--÷--".center(42)    
+    puts "SCORE: #{player.name} = #{player.score} | #{dealer.name} = #{dealer.score}".center(42)
+    puts "--÷--÷--÷--÷--÷--÷--÷--÷--÷--÷--".center(42)    
+  end
+
+  private
+
+  def dealer_for_today
+    %w(Derrick Bianca Luna Oliver).sample
   end
 end
 
-#Main
 game = Game.new.play
