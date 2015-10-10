@@ -103,6 +103,7 @@ class Player
     puts "#{name} has the following cards: "
     puts cards
     puts "#{name} has a total of #{calculate_total(cards)}" 
+    sleep 2
   end 
 
   def show_first_card
